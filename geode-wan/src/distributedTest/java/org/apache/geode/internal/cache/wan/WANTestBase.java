@@ -1208,6 +1208,7 @@ public class WANTestBase extends DistributedTestCase {
     stats.add(statistics.getConflationIndexesMapSize());
     stats.add(statistics.getSecondaryEventQueueSize());
     stats.add(statistics.getEventsProcessedByPQRM());
+    stats.add(statistics.getEventsExceedingAlertThreshold());
     return stats;
   }
 
@@ -1764,6 +1765,22 @@ public class WANTestBase extends DistributedTestCase {
       Integer batchSize, boolean isConflation, boolean isManualStart) {
 
     GatewaySenderFactory gateway = cache.createGatewaySenderFactory();
+    gateway.setParallel(true);
+    gateway.setMaximumQueueMemory(maxMemory);
+    gateway.setBatchSize(batchSize);
+    gateway.setManualStart(isManualStart);
+    // set dispatcher threads
+    gateway.setDispatcherThreads(numDispatcherThreadsForTheRun);
+    gateway.setBatchConflationEnabled(isConflation);
+    gateway.create(dsName, remoteDsId);
+  }
+
+  public static void createSenderAlertThresholdWithoutDiskStore(String dsName, int remoteDsId,
+      Integer maxMemory,
+      Integer batchSize, boolean isConflation, boolean isManualStart) {
+
+    GatewaySenderFactory gateway = cache.createGatewaySenderFactory();
+    gateway.setAlertThreshold(1);
     gateway.setParallel(true);
     gateway.setMaximumQueueMemory(maxMemory);
     gateway.setBatchSize(batchSize);
