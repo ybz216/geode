@@ -138,10 +138,16 @@ public class TXDetectReadConflictJUnitTest {
     TXState txState =
         (TXState) ((TXStateProxyImpl) TXManagerImpl.getCurrentTXState()).getRealDeal(null, null);
     txState.setAfterReservation(() -> readTransactionAfterReservation());
-    executorServiceRule.submit(() -> doPutOnReadKeyTransaction());
+    executorServiceRule.submit(() -> {
+      try {
+        doPutOnReadKeyTransaction();
+      } catch (Exception e) {
+      }
+    });
     txManager.commit();
     assertThat(region.get(key)).isSameAs(value);
     assertThat(region.get(key1)).isSameAs(newValue1);
+
   }
 
   private void readTransactionAfterReservation() {
