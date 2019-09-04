@@ -85,11 +85,8 @@ public class JMXMBeanReconnectDUnitTest {
 
   @Before
   public void before() throws Exception {
-    locator1 = lsRule.startLocatorVM(LOCATOR_1_VM_INDEX, locator1Properties());
-    locator1.waitTilLocatorFullyStarted();
-
-    locator2 = lsRule.startLocatorVM(LOCATOR_2_VM_INDEX, locator2Properties(), locator1.getPort());
-    locator2.waitTilLocatorFullyStarted();
+    locator1 = lsRule.startLocatorVM(0);
+    locator2 = lsRule.startLocatorVM(1, locator1.getPort());
 
     server1 = lsRule.startServerVM(SERVER_1_VM_INDEX, locator1.getPort());
     // start an extra server to have more MBeans, but we don't need to use it in these tests
@@ -125,7 +122,7 @@ public class JMXMBeanReconnectDUnitTest {
         .containsExactlyElementsOf(initialServerBeans)
         .hasSize(NUM_SERVER_BEANS);
 
-    locator1.waitTilLocatorFullyReconnected();
+    locator1.waitTilFullyReconnected();
 
     List<String> finalServerBeans = server1.invoke(() -> getLocalCanonicalBeanNames());
     assertThat(finalServerBeans)
@@ -148,7 +145,7 @@ public class JMXMBeanReconnectDUnitTest {
         .containsExactlyElementsOf(initialLocatorBeans)
         .hasSize(NUM_LOCATOR_BEANS);
 
-    server1.waitTilServerFullyReconnected();
+    server1.waitTilFullyReconnected();
     locator1.waitUntilRegionIsReadyOnExactlyThisManyServers(REGION_PATH, SERVER_COUNT);
 
     List<String> finalLocatorBeans = locator1.invoke(() -> getLocalCanonicalBeanNames());
