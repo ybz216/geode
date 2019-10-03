@@ -1023,5 +1023,5 @@ tools/Extensions/geode-web-management-0.0.0.1.war
 tools/Modules/Apache_Geode_Modules-0.0.0.1-AppServer.zip
 tools/Modules/Apache_Geode_Modules-0.0.0.1-Tomcat.zip
 tools/Modules/Apache_Geode_Modules-0.0.0.1-tcServer.zip
-tools/Modules/Apache_Geode_Modules-0.0.0-.1tcServer30.zip
+tools/Modules/Apache_Geode_Modules-0.0.0.1-tcServer30.zip
 tools/Pulse/geode-pulse-0.0.0.1.war
