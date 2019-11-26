@@ -78,10 +78,10 @@ public class SerialGatewaySenderImpl extends AbstractRemoteGatewaySender {
       }
       if (getDispatcherThreads() > 1) {
         eventProcessor = new RemoteConcurrentSerialGatewaySenderEventProcessor(
-            SerialGatewaySenderImpl.this, getThreadMonitorObj());
+            SerialGatewaySenderImpl.this, getThreadMonitorObj(), cleanQueues);
       } else {
         eventProcessor = new RemoteSerialGatewaySenderEventProcessor(SerialGatewaySenderImpl.this,
-            getId(), getThreadMonitorObj());
+            getId(), getThreadMonitorObj(), cleanQueues);
       }
       if (isStartEventProcessorInPausedState()) {
         this.pauseEvenIfProcessorStopped();
