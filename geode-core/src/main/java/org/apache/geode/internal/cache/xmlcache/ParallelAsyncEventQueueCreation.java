@@ -41,7 +41,7 @@ public class ParallelAsyncEventQueueCreation extends AbstractGatewaySender
       List<Integer> remoteDSIds) {}
 
   @Override
-  public void start() {}
+  public void start(boolean cleanQueues) {}
 
   @Override
   public void stop() {}

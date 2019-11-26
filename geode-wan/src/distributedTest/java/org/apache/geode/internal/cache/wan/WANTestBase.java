@@ -1076,7 +1076,7 @@ public class WANTestBase extends DistributedTestCase {
           break;
         }
       }
-      sender.start();
+      sender.start(false);
     } finally {
       exp.remove();
       exp1.remove();
@@ -4064,7 +4064,7 @@ public class WANTestBase extends DistributedTestCase {
         ManagementService service = ManagementService.getManagementService(cache);
         GatewaySenderMXBean bean = service.getLocalGatewaySenderMXBean("pn");
         assertNotNull(bean);
-        bean.start();
+        bean.start(false);
         assertTrue(bean.isRunning());
       }
     };

@@ -50,7 +50,7 @@ public class SerialGatewaySenderImpl extends AbstractRemoteGatewaySender {
   }
 
   @Override
-  public void start() {
+  public void start(boolean cleanQueues) {
     if (logger.isDebugEnabled()) {
       logger.debug("Starting gatewaySender : {}", this);
     }
