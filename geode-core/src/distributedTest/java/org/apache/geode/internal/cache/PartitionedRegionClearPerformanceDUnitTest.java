@@ -165,7 +165,8 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
       Cache cache = ClusterStartupRule.getCache();
       cache.createRegionFactory(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT)
           .setPartitionAttributes(
-              new PartitionAttributesFactory().setRedundantCopies(1).create()).create(regionName);
+              new PartitionAttributesFactory().setRedundantCopies(1).create())
+          .create(regionName);
 
       int numEntries = 100;
       Map<String, String> entries = new HashMap<>();
@@ -194,7 +195,8 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
       Cache cache = ClusterStartupRule.getCache();
       cache.createRegionFactory(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT)
           .setPartitionAttributes(
-              new PartitionAttributesFactory().setRedundantCopies(2).create()).create(regionName);
+              new PartitionAttributesFactory().setRedundantCopies(2).create())
+          .create(regionName);
 
       int numEntries = 100;
       Map<String, String> entries = new HashMap<>();
