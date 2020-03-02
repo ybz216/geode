@@ -41,6 +41,8 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
 
   private String regionName = "testRegion";
 
+  private int numEntries = 100_000;
+
   @Before
   public void setup() throws Exception {
     locator = clusterStartupRule.startLocatorVM(0, 0);
@@ -55,7 +57,6 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
       Cache cache = ClusterStartupRule.getCache();
       cache.createRegionFactory(RegionShortcut.PARTITION).create(regionName);
 
-      int numEntries = 100;
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -83,7 +84,6 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
       cache.createRegionFactory(RegionShortcut.PARTITION_REDUNDANT).setPartitionAttributes(
           new PartitionAttributesFactory().setRedundantCopies(1).create()).create(regionName);
 
-      int numEntries = 100;
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -111,7 +111,6 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
       cache.createRegionFactory(RegionShortcut.PARTITION_REDUNDANT).setPartitionAttributes(
           new PartitionAttributesFactory().setRedundantCopies(2).create()).create(regionName);
 
-      int numEntries = 100;
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -138,7 +137,6 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
       Cache cache = ClusterStartupRule.getCache();
       cache.createRegionFactory(RegionShortcut.PARTITION_PERSISTENT).create(regionName);
 
-      int numEntries = 100;
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -168,7 +166,6 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
               new PartitionAttributesFactory().setRedundantCopies(1).create())
           .create(regionName);
 
-      int numEntries = 100;
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -198,7 +195,6 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
               new PartitionAttributesFactory().setRedundantCopies(2).create())
           .create(regionName);
 
-      int numEntries = 100;
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -206,6 +202,36 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
       Region region = ClusterStartupRule.getCache().getRegion(regionName);
 
       assertThat(region.size()).isEqualTo(numEntries);
+      assertThat(region.getAttributes().getDataPolicy().withPersistence()).isTrue();
+      assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(2);
+
+      long startTime = System.currentTimeMillis();
+      region.removeAll(entries.keySet()); // should be region.clear();
+      long endTime = System.currentTimeMillis();
+      System.out.println(
+          "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
+              + " milliseconds to clear.");
+      assertThat(region.size()).isEqualTo(0);
+    });
+  }
+
+  @Test
+  public void testOneBucketPersistentRedundancyTwo() {
+    server1.invoke(() -> {
+      Cache cache = ClusterStartupRule.getCache();
+      cache.createRegionFactory(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT)
+          .setPartitionAttributes(
+              new PartitionAttributesFactory().setTotalNumBuckets(1).setRedundantCopies(2).create())
+          .create(regionName);
+
+      Map<String, String> entries = new HashMap<>();
+      IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
+      populateRegion(regionName, entries);
+
+      Region region = ClusterStartupRule.getCache().getRegion(regionName);
+
+      assertThat(region.size()).isEqualTo(numEntries);
+      assertThat(region.getAttributes().getPartitionAttributes().getTotalNumBuckets()).isEqualTo(1);
       assertThat(region.getAttributes().getDataPolicy().withPersistence()).isTrue();
       assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(2);
 
