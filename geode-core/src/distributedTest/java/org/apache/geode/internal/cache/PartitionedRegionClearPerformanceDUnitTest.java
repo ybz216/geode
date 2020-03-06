@@ -51,12 +51,14 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
     server3 = clusterStartupRule.startServerVM(3, locator.getPort());
   }
 
-  private void createRegionOnServer(MemberVM server, RegionShortcut type, int numBuckets, int redundancy) {
+  private void createRegionOnServer(MemberVM server, RegionShortcut type, int numBuckets,
+      int redundancy) {
     server.invoke(() -> {
       Cache cache = ClusterStartupRule.getCache();
       cache.createRegionFactory(type)
           .setPartitionAttributes(
-              new PartitionAttributesFactory().setTotalNumBuckets(numBuckets).setRedundantCopies(redundancy).create())
+              new PartitionAttributesFactory().setTotalNumBuckets(numBuckets)
+                  .setRedundantCopies(redundancy).create())
           .create(regionName);
     });
   }
