@@ -18,9 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.Serializable;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.IntStream;
 
 import junitparams.JUnitParamsRunner;
@@ -28,7 +26,6 @@ import junitparams.Parameters;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 
 import org.apache.geode.cache.Cache;
@@ -91,38 +88,42 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
   }
 
   private void populateRegion() {
-    server1.invoke(() -> {
-      Region region = ClusterStartupRule.getCache().getRegion("/" + regionName);
+    client.invoke(() -> {
+      Region clientRegion = ClusterStartupRule.getClientCache().getRegion("/" + regionName);
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       entries.entrySet().forEach(e -> {
-        region.put(e.getKey(), e.getValue());
+        clientRegion.put(e.getKey(), e.getValue());
       });
     });
   }
 
-  @Test
-  @Parameters({"true", "false"})
-  public void testNonPersistentNonRedundant(boolean isClient) {
-    createRegionInCluster(RegionShortcut.PARTITION, 113, 0);
-    populateRegion();
+  private void assertRegionSizeOnServer(int size) {
+    server1.invoke(()-> {
+      Region region = ClusterStartupRule.getCache().getRegion(regionName);
+      assertThat(region.size()).isEqualTo(size);
+    });
+  }
+
+  private void assertRegionAttributesOnServer(int numBuckets, boolean persistent, int redundancy) {
     server1.invoke(() -> {
       Region region = ClusterStartupRule.getCache().getRegion(regionName);
-      assertThat(region.size()).isEqualTo(numEntries);
-      assertThat(region.getAttributes().getDataPolicy().withPersistence()).isFalse();
-      assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(0);
+      assertThat(region.getAttributes().getPartitionAttributes().getTotalNumBuckets()).isEqualTo(numBuckets);
+      assertThat(region.getAttributes().getDataPolicy().withPersistence()).isEqualTo(persistent);
+      assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(redundancy);
     });
+  }
+
+  private void doRegionClear(String methodName, boolean isClient) {
     if (isClient) {
       client.invoke(() -> {
         Region clientRegion = ClusterStartupRule.getClientCache().getRegion(regionName);
         long startTime = System.currentTimeMillis();
-        Set keys = new HashSet<>();
-        IntStream.range(0, numEntries).forEach(i -> keys.add("key-" + i));
-        clientRegion.removeAll(keys); // should be clientRegion.clear();
+        clientRegion.removeAll(clientRegion.keySet()); // should be clientRegion.clear();
         long endTime = System.currentTimeMillis();
         System.out.println(
             "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
-                + " milliseconds to clear. " + " isClient=" + isClient);
+                + " milliseconds to clear. methodName=" + methodName + " isClient=" + isClient);
         assertThat(clientRegion.size()).isEqualTo(0);
       });
     } else {
@@ -133,159 +134,86 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
         long endTime = System.currentTimeMillis();
         System.out.println(
             "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
-                + " milliseconds to clear. " + " isClient=" + isClient);
+                + " milliseconds to clear. methodName=" + methodName + " isClient=" + isClient);
       });
     }
-    server1.invoke(()-> {
-      Region region = ClusterStartupRule.getCache().getRegion(regionName);
-      assertThat(region.size()).isEqualTo(0);
-    });
   }
-/*
+
   @Test
-  public void testRedundancyOneNonPersistent() {
+  @Parameters({"true", "false"})
+  public void testNonPersistentNonRedundant(boolean isClient) {
+    createRegionInCluster(RegionShortcut.PARTITION, 113, 0);
+    populateRegion();
+    assertRegionSizeOnServer(numEntries);
+    assertRegionAttributesOnServer(113, false, 0);
+    doRegionClear("testNonPersistentNonRedundant", isClient);
+    assertRegionSizeOnServer(0);
+  }
+
+  @Test
+  @Parameters({"true", "false"})
+  public void testRedundancyOneNonPersistent(boolean isClient) {
     createRegionInCluster(RegionShortcut.PARTITION_REDUNDANT, 113, 1);
-    server1.invoke(() -> {
-      Map<String, String> entries = new HashMap<>();
-      IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
-      populateRegion(regionName, entries);
-
-      Region region = ClusterStartupRule.getCache().getRegion(regionName);
-
-      assertThat(region.size()).isEqualTo(numEntries);
-      assertThat(region.getAttributes().getDataPolicy().withPersistence()).isFalse();
-      assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(1);
-
-      long startTime = System.currentTimeMillis();
-      region.removeAll(entries.keySet()); // should be region.clear();
-      long endTime = System.currentTimeMillis();
-      System.out.println(
-          "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
-              + " milliseconds to clear.");
-      assertThat(region.size()).isEqualTo(0);
-    });
+    populateRegion();
+    assertRegionSizeOnServer(numEntries);
+    assertRegionAttributesOnServer(113, false, 1);
+    doRegionClear("testRedundancyOneNonPersistent", isClient);
+    assertRegionSizeOnServer(0);
   }
 
   @Test
-  public void testRedundancyTwoNonPersistent() {
+  @Parameters({"true", "false"})
+  public void testRedundancyTwoNonPersistent(boolean isClient) {
     createRegionInCluster(RegionShortcut.PARTITION_REDUNDANT, 113, 2);
-    server1.invoke(() -> {
-      Map<String, String> entries = new HashMap<>();
-      IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
-      populateRegion(regionName, entries);
-
-      Region region = ClusterStartupRule.getCache().getRegion(regionName);
-
-      assertThat(region.size()).isEqualTo(numEntries);
-      assertThat(region.getAttributes().getDataPolicy().withPersistence()).isFalse();
-      assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(2);
-
-      long startTime = System.currentTimeMillis();
-      region.removeAll(entries.keySet()); // should be region.clear();
-      long endTime = System.currentTimeMillis();
-      System.out.println(
-          "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
-              + " milliseconds to clear.");
-      assertThat(region.size()).isEqualTo(0);
-    });
+    populateRegion();
+    assertRegionSizeOnServer(numEntries);
+    assertRegionAttributesOnServer(113, false, 2);
+    doRegionClear("testRedundancyTwoNonPersistent", isClient);
+    assertRegionSizeOnServer(0);
   }
 
   @Test
-  public void testPersistentNonRedundant() {
+  @Parameters({"true", "false"})
+  public void testPersistentNonRedundant(boolean isClient) {
     createRegionInCluster(RegionShortcut.PARTITION_PERSISTENT, 113, 0);
-    server1.invoke(() -> {
-      Map<String, String> entries = new HashMap<>();
-      IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
-      populateRegion(regionName, entries);
-
-      Region region = ClusterStartupRule.getCache().getRegion(regionName);
-
-      assertThat(region.size()).isEqualTo(numEntries);
-      assertThat(region.getAttributes().getDataPolicy().withPersistence()).isTrue();
-      assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(0);
-
-      long startTime = System.currentTimeMillis();
-      region.removeAll(entries.keySet()); // should be region.clear();
-      long endTime = System.currentTimeMillis();
-      System.out.println(
-          "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
-              + " milliseconds to clear.");
-      assertThat(region.size()).isEqualTo(0);
-    });
+    populateRegion();
+    assertRegionSizeOnServer(numEntries);
+    assertRegionAttributesOnServer(113, true, 0);
+    doRegionClear("testPersistentNonRedundant", isClient);
+    assertRegionSizeOnServer(0);
   }
 
   @Test
-  public void testPersistentRedundancyOne() {
+  @Parameters({"true", "false"})
+  public void testPersistentRedundancyOne(boolean isClient) {
     createRegionInCluster(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT, 113, 1);
-    server1.invoke(() -> {
-      Map<String, String> entries = new HashMap<>();
-      IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
-      populateRegion(regionName, entries);
-
-      Region region = ClusterStartupRule.getCache().getRegion(regionName);
-
-      assertThat(region.size()).isEqualTo(numEntries);
-      assertThat(region.getAttributes().getDataPolicy().withPersistence()).isTrue();
-      assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(1);
-
-      long startTime = System.currentTimeMillis();
-      region.removeAll(entries.keySet()); // should be region.clear();
-      long endTime = System.currentTimeMillis();
-      System.out.println(
-          "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
-              + " milliseconds to clear.");
-      assertThat(region.size()).isEqualTo(0);
-    });
+    populateRegion();
+    assertRegionSizeOnServer(numEntries);
+    assertRegionAttributesOnServer(113, true, 1);
+    doRegionClear("testPersistentRedundancyOne", isClient);
+    assertRegionSizeOnServer(0);
   }
 
   @Test
-  public void testPersistentRedundancyTwo() {
+  @Parameters({"true", "false"})
+  public void testPersistentRedundancyTwo(boolean isClient) {
     createRegionInCluster(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT, 113, 2);
-    server1.invoke(() -> {
-      Map<String, String> entries = new HashMap<>();
-      IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
-      populateRegion(regionName, entries);
-
-      Region region = ClusterStartupRule.getCache().getRegion(regionName);
-
-      assertThat(region.size()).isEqualTo(numEntries);
-      assertThat(region.getAttributes().getDataPolicy().withPersistence()).isTrue();
-      assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(2);
-
-      long startTime = System.currentTimeMillis();
-      region.removeAll(entries.keySet()); // should be region.clear();
-      long endTime = System.currentTimeMillis();
-      System.out.println(
-          "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
-              + " milliseconds to clear.");
-      assertThat(region.size()).isEqualTo(0);
-    });
+    populateRegion();
+    assertRegionSizeOnServer(numEntries);
+    assertRegionAttributesOnServer(113, true, 2);
+    doRegionClear("testPersistentRedundancyTwo", isClient);
+    assertRegionSizeOnServer(0);
   }
 
   @Test
-  public void testOneBucketPersistentRedundancyTwo() {
+  @Parameters({"true", "false"})
+  public void testOneBucketPersistentRedundancyTwo(boolean isClient) {
     createRegionInCluster(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT, 1, 2);
-
-    server1.invoke(() -> {
-      Map<String, String> entries = new HashMap<>();
-      IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
-      populateRegion(regionName, entries);
-
-      Region region = ClusterStartupRule.getCache().getRegion(regionName);
-
-      assertThat(region.size()).isEqualTo(numEntries);
-      assertThat(region.getAttributes().getPartitionAttributes().getTotalNumBuckets()).isEqualTo(1);
-      assertThat(region.getAttributes().getDataPolicy().withPersistence()).isTrue();
-      assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(2);
-
-      long startTime = System.currentTimeMillis();
-      region.removeAll(entries.keySet()); // should be region.clear();
-      long endTime = System.currentTimeMillis();
-      System.out.println(
-          "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
-              + " milliseconds to clear.");
-      assertThat(region.size()).isEqualTo(0);
-    });
+    populateRegion();
+    assertRegionSizeOnServer(numEntries);
+    assertRegionAttributesOnServer(1, true, 2);
+    doRegionClear("testOneBucketPersistentRedundancyTwo", isClient);
+    assertRegionSizeOnServer(0);
   }
-*/
+
 }
