@@ -37,7 +37,7 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
   @Rule
   public ClusterStartupRule clusterStartupRule = new ClusterStartupRule();
 
-  private MemberVM locator, server1;
+  private MemberVM locator, server1, server2, server3;
 
   private String regionName = "testRegion";
 
@@ -47,16 +47,37 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
   public void setup() throws Exception {
     locator = clusterStartupRule.startLocatorVM(0, 0);
     server1 = clusterStartupRule.startServerVM(1, locator.getPort());
-    clusterStartupRule.startServerVM(2, locator.getPort());
-    clusterStartupRule.startServerVM(3, locator.getPort());
+    server2 = clusterStartupRule.startServerVM(2, locator.getPort());
+    server3 = clusterStartupRule.startServerVM(3, locator.getPort());
+  }
+
+  private void createRegionOnServer(MemberVM server, RegionShortcut type, int numBuckets, int redundancy) {
+    server.invoke(() -> {
+      Cache cache = ClusterStartupRule.getCache();
+      cache.createRegionFactory(type)
+          .setPartitionAttributes(
+              new PartitionAttributesFactory().setTotalNumBuckets(numBuckets).setRedundantCopies(redundancy).create())
+          .create(regionName);
+    });
+  }
+
+  private void createRegionInCluster(RegionShortcut type, int numBuckets, int redundancy) {
+    createRegionOnServer(server1, type, numBuckets, redundancy);
+    createRegionOnServer(server2, type, numBuckets, redundancy);
+    createRegionOnServer(server3, type, numBuckets, redundancy);
+  }
+
+  private void populateRegion(String regionName, Map<String, String> entries) {
+    Region r = ClusterStartupRule.getCache().getRegion("/" + regionName);
+    entries.entrySet().forEach(e -> {
+      r.put(e.getKey(), e.getValue());
+    });
   }
 
   @Test
   public void testNonPersistentNonRedundant() {
+    createRegionInCluster(RegionShortcut.PARTITION, 113, 0);
     server1.invoke(() -> {
-      Cache cache = ClusterStartupRule.getCache();
-      cache.createRegionFactory(RegionShortcut.PARTITION).create(regionName);
-
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -79,11 +100,8 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
 
   @Test
   public void testRedundancyOneNonPersistent() {
+    createRegionInCluster(RegionShortcut.PARTITION_REDUNDANT, 113, 1);
     server1.invoke(() -> {
-      Cache cache = ClusterStartupRule.getCache();
-      cache.createRegionFactory(RegionShortcut.PARTITION_REDUNDANT).setPartitionAttributes(
-          new PartitionAttributesFactory().setRedundantCopies(1).create()).create(regionName);
-
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -106,11 +124,8 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
 
   @Test
   public void testRedundancyTwoNonPersistent() {
+    createRegionInCluster(RegionShortcut.PARTITION_REDUNDANT, 113, 2);
     server1.invoke(() -> {
-      Cache cache = ClusterStartupRule.getCache();
-      cache.createRegionFactory(RegionShortcut.PARTITION_REDUNDANT).setPartitionAttributes(
-          new PartitionAttributesFactory().setRedundantCopies(2).create()).create(regionName);
-
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -133,10 +148,8 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
 
   @Test
   public void testPersistentNonRedundant() {
+    createRegionInCluster(RegionShortcut.PARTITION_PERSISTENT, 113, 0);
     server1.invoke(() -> {
-      Cache cache = ClusterStartupRule.getCache();
-      cache.createRegionFactory(RegionShortcut.PARTITION_PERSISTENT).create(regionName);
-
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -159,13 +172,8 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
 
   @Test
   public void testPersistentRedundancyOne() {
+    createRegionInCluster(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT, 113, 1);
     server1.invoke(() -> {
-      Cache cache = ClusterStartupRule.getCache();
-      cache.createRegionFactory(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT)
-          .setPartitionAttributes(
-              new PartitionAttributesFactory().setRedundantCopies(1).create())
-          .create(regionName);
-
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -188,13 +196,8 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
 
   @Test
   public void testPersistentRedundancyTwo() {
+    createRegionInCluster(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT, 113, 2);
     server1.invoke(() -> {
-      Cache cache = ClusterStartupRule.getCache();
-      cache.createRegionFactory(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT)
-          .setPartitionAttributes(
-              new PartitionAttributesFactory().setRedundantCopies(2).create())
-          .create(regionName);
-
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -217,13 +220,9 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
 
   @Test
   public void testOneBucketPersistentRedundancyTwo() {
-    server1.invoke(() -> {
-      Cache cache = ClusterStartupRule.getCache();
-      cache.createRegionFactory(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT)
-          .setPartitionAttributes(
-              new PartitionAttributesFactory().setTotalNumBuckets(1).setRedundantCopies(2).create())
-          .create(regionName);
+    createRegionInCluster(RegionShortcut.PARTITION_REDUNDANT_PERSISTENT, 1, 2);
 
+    server1.invoke(() -> {
       Map<String, String> entries = new HashMap<>();
       IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
       populateRegion(regionName, entries);
@@ -245,10 +244,4 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
     });
   }
 
-  private void populateRegion(String regionName, Map<String, String> entries) {
-    Region r = ClusterStartupRule.getCache().getRegion("/" + regionName);
-    entries.entrySet().forEach(e -> {
-      r.put(e.getKey(), e.getValue());
-    });
-  }
 }
