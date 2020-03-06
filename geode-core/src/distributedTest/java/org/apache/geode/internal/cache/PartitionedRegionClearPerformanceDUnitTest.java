@@ -18,26 +18,38 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.IntStream;
 
+import junitparams.JUnitParamsRunner;
+import junitparams.Parameters;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TestName;
+import org.junit.runner.RunWith;
 
 import org.apache.geode.cache.Cache;
 import org.apache.geode.cache.PartitionAttributesFactory;
 import org.apache.geode.cache.Region;
 import org.apache.geode.cache.RegionShortcut;
+import org.apache.geode.cache.client.ClientCache;
+import org.apache.geode.cache.client.ClientRegionShortcut;
+import org.apache.geode.test.dunit.rules.ClientVM;
 import org.apache.geode.test.dunit.rules.ClusterStartupRule;
 import org.apache.geode.test.dunit.rules.MemberVM;
 
+@RunWith(JUnitParamsRunner.class)
 public class PartitionedRegionClearPerformanceDUnitTest implements Serializable {
 
   @Rule
-  public ClusterStartupRule clusterStartupRule = new ClusterStartupRule();
+  public ClusterStartupRule clusterStartupRule = new ClusterStartupRule(5);
 
   private MemberVM locator, server1, server2, server3;
+
+  private ClientVM client;
 
   private String regionName = "testRegion";
 
@@ -49,6 +61,7 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
     server1 = clusterStartupRule.startServerVM(1, locator.getPort());
     server2 = clusterStartupRule.startServerVM(2, locator.getPort());
     server3 = clusterStartupRule.startServerVM(3, locator.getPort());
+    client = clusterStartupRule.startClientVM(4, c -> c.withLocatorConnection(locator.getPort()));
   }
 
   private void createRegionOnServer(MemberVM server, RegionShortcut type, int numBuckets,
@@ -63,43 +76,72 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
     });
   }
 
+  private void createRegionOnClient(ClientRegionShortcut type) {
+    client.invoke(() -> {
+      ClientCache clientCache = ClusterStartupRule.getClientCache();
+      clientCache.createClientRegionFactory(type).create(regionName);
+    });
+  }
+
   private void createRegionInCluster(RegionShortcut type, int numBuckets, int redundancy) {
     createRegionOnServer(server1, type, numBuckets, redundancy);
     createRegionOnServer(server2, type, numBuckets, redundancy);
     createRegionOnServer(server3, type, numBuckets, redundancy);
+    createRegionOnClient(ClientRegionShortcut.CACHING_PROXY);
   }
 
-  private void populateRegion(String regionName, Map<String, String> entries) {
-    Region r = ClusterStartupRule.getCache().getRegion("/" + regionName);
-    entries.entrySet().forEach(e -> {
-      r.put(e.getKey(), e.getValue());
+  private void populateRegion() {
+    server1.invoke(() -> {
+      Region region = ClusterStartupRule.getCache().getRegion("/" + regionName);
+      Map<String, String> entries = new HashMap<>();
+      IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
+      entries.entrySet().forEach(e -> {
+        region.put(e.getKey(), e.getValue());
+      });
     });
   }
 
   @Test
-  public void testNonPersistentNonRedundant() {
+  @Parameters({"true", "false"})
+  public void testNonPersistentNonRedundant(boolean isClient) {
     createRegionInCluster(RegionShortcut.PARTITION, 113, 0);
+    populateRegion();
     server1.invoke(() -> {
-      Map<String, String> entries = new HashMap<>();
-      IntStream.range(0, numEntries).forEach(i -> entries.put("key-" + i, "value-" + i));
-      populateRegion(regionName, entries);
-
       Region region = ClusterStartupRule.getCache().getRegion(regionName);
-
       assertThat(region.size()).isEqualTo(numEntries);
       assertThat(region.getAttributes().getDataPolicy().withPersistence()).isFalse();
       assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(0);
-
-      long startTime = System.currentTimeMillis();
-      region.removeAll(entries.keySet()); // should be region.clear();
-      long endTime = System.currentTimeMillis();
-      System.out.println(
-          "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
-              + " milliseconds to clear.");
+    });
+    if (isClient) {
+      client.invoke(() -> {
+        Region clientRegion = ClusterStartupRule.getClientCache().getRegion(regionName);
+        long startTime = System.currentTimeMillis();
+        Set keys = new HashSet<>();
+        IntStream.range(0, numEntries).forEach(i -> keys.add("key-" + i));
+        clientRegion.removeAll(keys); // should be clientRegion.clear();
+        long endTime = System.currentTimeMillis();
+        System.out.println(
+            "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
+                + " milliseconds to clear. " + " isClient=" + isClient);
+        assertThat(clientRegion.size()).isEqualTo(0);
+      });
+    } else {
+      server1.invoke(() -> {
+        Region region = ClusterStartupRule.getCache().getRegion(regionName);
+        long startTime = System.currentTimeMillis();
+        region.removeAll(region.keySet()); // should be region.clear();
+        long endTime = System.currentTimeMillis();
+        System.out.println(
+            "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
+                + " milliseconds to clear. " + " isClient=" + isClient);
+      });
+    }
+    server1.invoke(()-> {
+      Region region = ClusterStartupRule.getCache().getRegion(regionName);
       assertThat(region.size()).isEqualTo(0);
     });
   }
-
+/*
   @Test
   public void testRedundancyOneNonPersistent() {
     createRegionInCluster(RegionShortcut.PARTITION_REDUNDANT, 113, 1);
@@ -245,5 +287,5 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
       assertThat(region.size()).isEqualTo(0);
     });
   }
-
+*/
 }
