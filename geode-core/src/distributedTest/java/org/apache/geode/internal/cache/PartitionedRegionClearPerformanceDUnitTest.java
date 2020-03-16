@@ -99,7 +99,7 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
   }
 
   private void assertRegionSizeOnServer(int size) {
-    server1.invoke(()-> {
+    server1.invoke(() -> {
       Region region = ClusterStartupRule.getCache().getRegion(regionName);
       assertThat(region.size()).isEqualTo(size);
     });
@@ -108,9 +108,11 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
   private void assertRegionAttributesOnServer(int numBuckets, boolean persistent, int redundancy) {
     server1.invoke(() -> {
       Region region = ClusterStartupRule.getCache().getRegion(regionName);
-      assertThat(region.getAttributes().getPartitionAttributes().getTotalNumBuckets()).isEqualTo(numBuckets);
+      assertThat(region.getAttributes().getPartitionAttributes().getTotalNumBuckets())
+          .isEqualTo(numBuckets);
       assertThat(region.getAttributes().getDataPolicy().withPersistence()).isEqualTo(persistent);
-      assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies()).isEqualTo(redundancy);
+      assertThat(region.getAttributes().getPartitionAttributes().getRedundantCopies())
+          .isEqualTo(redundancy);
     });
   }
 
@@ -119,7 +121,7 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
       client.invoke(() -> {
         Region clientRegion = ClusterStartupRule.getClientCache().getRegion(regionName);
         long startTime = System.currentTimeMillis();
-        clientRegion.removeAll(clientRegion.keySet()); // should be clientRegion.clear();
+        clientRegion.clear();
         long endTime = System.currentTimeMillis();
         System.out.println(
             "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
@@ -130,7 +132,7 @@ public class PartitionedRegionClearPerformanceDUnitTest implements Serializable 
       server1.invoke(() -> {
         Region region = ClusterStartupRule.getCache().getRegion(regionName);
         long startTime = System.currentTimeMillis();
-        region.removeAll(region.keySet()); // should be region.clear();
+        region.clear();
         long endTime = System.currentTimeMillis();
         System.out.println(
             "Partitioned region with " + numEntries + " entries takes " + (endTime - startTime)
